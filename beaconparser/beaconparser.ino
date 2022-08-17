@@ -56,7 +56,7 @@ time_t posix;
 
 void setup() {
   //Serial.begin(57600);
-  Serial1.begin(57600);
+  Serial.begin(115200);
   msg_pos = 0;
   byte_buf[0] = HEDGEHOG_HEADER;
   byte_buf[1] = PACKET_TYPE;
@@ -71,9 +71,9 @@ void setup() {
 }
 
 void loop() {
-  while(Serial1.available() > 0)
+  while(Serial.available() > 0)
   {
-    incoming_byte = Serial1.read();
+    incoming_byte = Serial.read();
     switch(msg_pos)
     {
       case 0:
@@ -133,10 +133,11 @@ void loop() {
         if (incoming_byte == HEDGEHOG_DATA_LEN)
         {
           msg_pos = 0;
+          delay(1);
           // Get data into buffer
           for (uint8_t i = 5; i < 33; i++)
           {
-            byte_buf[i] = Serial1.read();
+            byte_buf[i] = Serial.read();
             delay(1);
           }
 
@@ -164,10 +165,10 @@ void loop() {
 
           //  Process data
           posix2gps(&timestamp.i8, &gps_week.u2, &gps_tow_ms.u4);
-          lat_deg.i4 = 332154770 + int(float(y_pos_mm.i4) * 0.009);
-          lon_deg.i4 = -875436600 + int(float(x_pos_mm.i4) * 0.0107);
+          lat_deg.i4 = 332154770 + int(float(x_pos_mm.i4) * 0.09);
+          lon_deg.i4 = -875436600 + int(float(y_pos_mm.i4) * 0.107);
           gspeed.u4 = int(sqrt((sq(vel_x_mmps.i4) + sq(vel_y_mmps.i4))));
-          gcourse.u4 = int(atan2(vel_x_mmps.i4, vel_y_mmps.i4) * 100000);
+          gcourse.u4 = (int(atan2(vel_x_mmps.i4, vel_y_mmps.i4) * 57.29578049 * 100000) + 360) % 360;
           // Store prev_data for next loop
           prev_timestamp_ms = timestamp.i8;
           prev_x_pos_mm = x_pos_mm.i4;
@@ -190,7 +191,7 @@ void loop() {
     
   }
   cur_time_ms = millis();
-  if (cur_time_ms - start_time_ms > 1000)
+  if (cur_time_ms - start_time_ms > 200)
   {
     send_dop();
     send_pvt();
@@ -211,7 +212,7 @@ void posix2gps(int64_t *posix, uint16_t *gps_week, uint32_t *gps_tow_ms)
 // Function to send UBX_NAV_EOE message
 void send_eoe()
 {
-  Serial1.write(UBX_HEADER,2);
+  Serial.write(UBX_HEADER,2);
   msg[0] = UBX_NAV_MSG_CLASS;
   msg[1] = UBX_NAV_EOE_ID;
   msg[2] = UBX_NAV_EOE_LEN[0];
@@ -220,16 +221,16 @@ void send_eoe()
   msg[5] = gps_tow_ms.u1[1];
   msg[6] = gps_tow_ms.u1[2];
   msg[7] = gps_tow_ms.u1[3];
-  Serial1.write(msg,EOE_LEN);
+  Serial.write(msg,EOE_LEN);
   calc_checksum(EOE_LEN);
-  Serial1.write(checksum,2);
+  Serial.write(checksum,2);
 }
 
 // Function to send UBX_NAV_DOP message
 void send_dop()
 {
   // All DOP values are mock values 1.56 and are conservative uncertainty of beacon system
-  Serial1.write(UBX_HEADER,2);
+  Serial.write(UBX_HEADER,2);
   msg[0] = UBX_NAV_MSG_CLASS;
   msg[1] = UBX_NAV_DOP_ID;
   msg[2] = UBX_NAV_DOP_LEN[0];
@@ -252,15 +253,15 @@ void send_dop()
   msg[19] = 0x00;
   msg[20] = 0x9C;
   msg[21] = 0x00;
-  Serial1.write(msg,DOP_LEN);
+  Serial.write(msg,DOP_LEN);
   calc_checksum(DOP_LEN);
-  Serial1.write(checksum,2);
+  Serial.write(checksum,2);
 }
 
 // Function to send UBX_NAV_PVT message
 void send_pvt()
 {
-  Serial1.write(UBX_HEADER,2);
+  Serial.write(UBX_HEADER,2);
   msg[0] = UBX_NAV_MSG_CLASS;
   msg[1] = UBX_NAV_PVT_ID;
   msg[2] = UBX_NAV_PVT_LEN[0];
@@ -297,15 +298,15 @@ void send_pvt()
   // Number of SV - Marvelmind assumes 8
   msg[27] = 0x08;
   // Lat in deg times 10^6
-  msg[28] = lat_deg.u1[0];
-  msg[29] = lat_deg.u1[1];
-  msg[30] = lat_deg.u1[2];
-  msg[31] = lat_deg.u1[3];
+  msg[28] = lon_deg.u1[0];
+  msg[29] = lon_deg.u1[1];
+  msg[30] = lon_deg.u1[2];
+  msg[31] = lon_deg.u1[3];
   // Lon in deg times 10^6
-  msg[32] = lon_deg.u1[0];
-  msg[33] = lon_deg.u1[1];
-  msg[34] = lon_deg.u1[2];
-  msg[35] = lon_deg.u1[3];
+  msg[32] = lat_deg.u1[0];
+  msg[33] = lat_deg.u1[1];
+  msg[34] = lat_deg.u1[2];
+  msg[35] = lat_deg.u1[3];
   // Height above ellipsoid in mm
   msg[36] = z_pos_mm.u1[0];
   msg[37] = z_pos_mm.u1[1];
@@ -327,15 +328,15 @@ void send_pvt()
   msg[50] = 0x00;
   msg[51] = 0x00;
   // NED north velocity
-  msg[52] = vel_y_mmps.u1[0];
-  msg[53] = vel_y_mmps.u1[1];
-  msg[54] = vel_y_mmps.u1[2];
-  msg[55] = vel_y_mmps.u1[3];
+  msg[52] = vel_x_mmps.u1[0];
+  msg[53] = vel_x_mmps.u1[1];
+  msg[54] = vel_x_mmps.u1[2];
+  msg[55] = vel_x_mmps.u1[3];
   // NED east velocity
   msg[56] = vel_y_mmps.u1[0];
   msg[57] = vel_y_mmps.u1[1];
   msg[58] = vel_y_mmps.u1[2];
-  msg[59] = vel_x_mmps.u1[3];
+  msg[59] = vel_y_mmps.u1[3];
     // NED down velocity
   msg[60] = vel_z_mmps.u1[0];
   msg[61] = vel_z_mmps.u1[1];
@@ -367,9 +368,9 @@ void send_pvt()
   // Additional flag at 78 
   msg[82] = 0x00;
   
-  Serial1.write(msg,PVT_LEN);
+  Serial.write(msg,PVT_LEN);
   calc_checksum(PVT_LEN);
-  Serial1.write(checksum,2);
+  Serial.write(checksum,2);
 }
 
 // Generate checksum bytes of UBX messages based on UBX description
