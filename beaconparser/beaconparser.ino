@@ -42,6 +42,7 @@ int32_t prev_x_pos_mm, prev_y_pos_mm, prev_z_pos_mm;
 
 uint8_t msg_pos; 
 float _dt_s;
+uint8_t num_sat, k;
 
 // Declare unions
 typedef union { uint8_t u1[2]; uint16_t u2; int16_t i2;} union_16;
@@ -68,6 +69,7 @@ void setup() {
   prev_y_pos_mm = 0;
   prev_z_pos_mm = 0;
   start_time_ms = 0;
+  num_sat = 0;
 }
 
 void loop() {
@@ -154,26 +156,32 @@ void loop() {
           timestamp.i8 += 18001200;
           posix = timestamp.i8 / 1000;
           year_short.u2 = year(posix);
+          
+//          if (_dt_s > 10)
+//          {
+//            break;
+//          }
+          
           _dt_s = 1000 / float(timestamp.i8 - prev_timestamp_ms);
-          if (_dt_s > 10)
-          {
-            break;
-          }
           vel_x_mmps.i4 = int(float(x_pos_mm.i4 - prev_x_pos_mm) * _dt_s) ;
           vel_y_mmps.i4 = int(float(y_pos_mm.i4 - prev_y_pos_mm) * _dt_s) ;
           vel_z_mmps.i4 = int(float(z_pos_mm.i4 - prev_z_pos_mm) * _dt_s) ;
-
-          //  Process data
-          posix2gps(&timestamp.i8, &gps_week.u2, &gps_tow_ms.u4);
-          lat_deg.i4 = 332154770 + int(float(x_pos_mm.i4) * 0.09);
-          lon_deg.i4 = -875436600 + int(float(y_pos_mm.i4) * 0.107);
-          gspeed.u4 = int(sqrt((sq(vel_x_mmps.i4) + sq(vel_y_mmps.i4))));
-          gcourse.u4 = (int(atan2(vel_x_mmps.i4, vel_y_mmps.i4) * 57.29578049 * 100000) + 360) % 360;
-          // Store prev_data for next loop
           prev_timestamp_ms = timestamp.i8;
           prev_x_pos_mm = x_pos_mm.i4;
           prev_y_pos_mm = y_pos_mm.i4;
           prev_z_pos_mm = z_pos_mm.i4;
+
+          //  Process data
+          posix2gps(&timestamp.i8, &gps_week.u2, &gps_tow_ms.u4);
+          lat_deg.i4 = 332154770 + int(float(x_pos_mm.i4) * 0.09);
+          lon_deg.i4 = -875436600 - int(float(y_pos_mm.i4) * 0.107);
+          gspeed.u4 = int(sqrt((sq(vel_x_mmps.i4) + sq(vel_y_mmps.i4))));
+          gcourse.u4 = (int(atan2(vel_x_mmps.i4, vel_y_mmps.i4) * 57.29578049 * 100000) + 360) % 360;
+
+          send_dop();
+          send_pvt();
+          send_eoe();
+          
         }
         else
         {
@@ -190,14 +198,14 @@ void loop() {
 
     
   }
-  cur_time_ms = millis();
-  if (cur_time_ms - start_time_ms > 200)
-  {
-    send_dop();
-    send_pvt();
-    send_eoe();
-    start_time_ms = cur_time_ms;
-  }
+//  cur_time_ms = millis();
+//  if (cur_time_ms - start_time_ms > 200)
+//  {
+//    send_dop();
+//    send_pvt();
+//    send_eoe();
+//    start_time_ms = cur_time_ms;
+//  }
   
 }
 
@@ -295,8 +303,8 @@ void send_pvt()
   msg[25] = 0x01;
   // Emulate flag for bit field 22 (11100000)
   msg[26] = 0xE5;
-  // Number of SV - Marvelmind assumes 8
-  msg[27] = 0x08;
+  // Number of SV - Marvelmind assumes 8 after 10 seconds of 0 SV
+  msg[27] = 8;
   // Lat in deg times 10^6
   msg[28] = lon_deg.u1[0];
   msg[29] = lon_deg.u1[1];
