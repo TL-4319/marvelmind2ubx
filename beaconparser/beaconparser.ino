@@ -179,12 +179,12 @@ void loop() {
           /* Begin processing data */
           if (!filter_init){
             // Cut off freq of 2 Hz and sampling freq of 4 Hz
-            xpos_filter.Init(0.4, 4.0, x_pos_mm.i4);
-            ypos_filter.Init(0.4, 4.0, y_pos_mm.i4);
-            zpos_filter.Init(0.4, 4.0, z_pos_mm.i4);
-            xvel_filter.Init(0.1, 4.0, 0.0);
-            yvel_filter.Init(0.1, 4.0, 0.0);
-            zvel_filter.Init(0.1, 4.0, 0.0);
+            xpos_filter.Init(1.5, 4.0, x_pos_mm.i4);
+            ypos_filter.Init(1.5, 4.0, y_pos_mm.i4);
+            zpos_filter.Init(1.5, 4.0, z_pos_mm.i4);
+            xvel_filter.Init(1.5, 4.0, 0.0);
+            yvel_filter.Init(1.5, 4.0, 0.0);
+            zvel_filter.Init(1.5, 4.0, 0.0);
             filter_init = true;
             continue;
           }
@@ -202,8 +202,8 @@ void loop() {
           vel_x_mmps.i4 = xvel_filter.Filter(vel_x_mmps.i4);
           vel_y_mmps.i4 = -int(float(filtered_y_pos - ypos_filter.prev_val()) * _dt_s) ;
           vel_y_mmps.i4 = yvel_filter.Filter(vel_y_mmps.i4);
-          vel_z_mmps.i4 = int(float(filtered_z_pos - zpos_filter.prev_val()) * _dt_s) ;
-          vel_y_mmps.i4 = zvel_filter.Filter(vel_z_mmps.i4);
+          vel_z_mmps.i4 = -int(float(filtered_z_pos - zpos_filter.prev_val()) * _dt_s) ;
+          vel_z_mmps.i4 = zvel_filter.Filter(vel_z_mmps.i4);
           prev_timestamp_ms = timestamp.i8;
 
           // Generate mock GPS data
@@ -211,7 +211,7 @@ void loop() {
           lat_deg.i4 = 332154770 + int(float(filtered_x_pos) * 0.09);
           lon_deg.i4 = -875436600 - int(float(filtered_y_pos) * 0.107);
           gspeed.u4 = int(sqrt((sq(vel_x_mmps.i4) + sq(vel_y_mmps.i4))));
-          gcourse.u4 = (int(atan2(vel_x_mmps.i4, vel_y_mmps.i4) * 57.29578049 * 100000) + 360) % 360;
+          gcourse.u4 = (int(atan2(vel_x_mmps.i4, vel_y_mmps.i4) * 57.29578049 * 100000.0) + 360) % 360;
 
           send_dop();
           send_pvt();
