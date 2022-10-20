@@ -1,5 +1,27 @@
 #include<TimeLib.h>
 
+class Iir {
+  public:
+    void Init(float cutoff_hz, float samp_hz, float initial_val){
+      float fc = cutoff_hz / samp_hz;
+      float c_twoPI_fc = cos(2.0 * PI * fc);
+      b_ = 2.0 - c_twoPI_fc - sqrt(pow(2.0 - c_twoPI_fc, 2.0)) - 1.0;
+      a_ = 1.0 - b_;
+      prev_output_ = initial_val;
+    }
+    float Filter (float val){
+      float ret;
+      ret = a_ * val + b_ * prev_output_;
+      prev_output_ = ret;
+      return ret;
+    }
+    float prev_val(){
+      return prev_output_;
+    }
+  private:
+    float a_, b_, prev_output_;
+};
+
 // Define constants for UBX_NAV protocol
 const uint16_t UBX_TS_MS = 1000; // Sample time in ms 
 const uint8_t UBX_HEADER[2] = {0xB5, 0x62};
@@ -39,10 +61,12 @@ uint8_t incoming_byte;
 
 int64_t prev_timestamp_ms, start_time_ms, cur_time_ms;
 int32_t prev_x_pos_mm, prev_y_pos_mm, prev_z_pos_mm;
+Iir xpos_filter, ypos_filter, zpos_filter;
 
-uint8_t msg_pos; 
+uint8_t msg_pos, k; 
 float _dt_s;
-uint8_t num_sat, k;
+bool filter_init = false;
+float filtered_x_pos, filtered_y_pos, filtered_z_pos;
 
 // Declare unions
 typedef union { uint8_t u1[2]; uint16_t u2; int16_t i2;} union_16;
@@ -69,7 +93,6 @@ void setup() {
   prev_y_pos_mm = 0;
   prev_z_pos_mm = 0;
   start_time_ms = 0;
-  num_sat = 0;
 }
 
 void loop() {
@@ -152,29 +175,33 @@ void loop() {
             y_pos_mm.u1[i] = byte_buf [17 + i];
             z_pos_mm.u1[i] = byte_buf [21 + i];
           }
-          // 17980000
+          /* Begin processing data */
+          if (!filter_init){
+            // Cut off freq of 2 Hz and sampling freq of 4 Hz
+            xpos_filter.Init(2.0, 4.0, x_pos_mm.i4);
+            ypos_filter.Init(2.0, 4.0, y_pos_mm.i4);
+            zpos_filter.Init(2.0, 4.0, z_pos_mm.i4);
+            continue;
+          }
+          else {
+            filtered_x_pos = xpos_filter.Filter(x_pos_mm.i4);
+            filtered_y_pos = ypos_filter.Filter(y_pos_mm.i4);
+            filtered_z_pos = zpos_filter.Filter(z_pos_mm.i4);
+          }
           timestamp.i8 += 18001200;
           posix = timestamp.i8 / 1000;
           year_short.u2 = year(posix);
           
-//          if (_dt_s > 10)
-//          {
-//            break;
-//          }
-          
-          _dt_s = 1000 / float(timestamp.i8 - prev_timestamp_ms);
-          vel_x_mmps.i4 = int(float(x_pos_mm.i4 - prev_x_pos_mm) * _dt_s) ;
-          vel_y_mmps.i4 = int(float(y_pos_mm.i4 - prev_y_pos_mm) * _dt_s) ;
-          vel_z_mmps.i4 = int(float(z_pos_mm.i4 - prev_z_pos_mm) * _dt_s) ;
+          _dt_s = 1000.0 / float(timestamp.i8 - prev_timestamp_ms);
+          vel_x_mmps.i4 = int(float(filtered_x_pos - xpos_filter.prev_val()) * _dt_s) ;
+          vel_y_mmps.i4 = -int(float(filtered_y_pos - ypos_filter.prev_val()) * _dt_s) ;
+          vel_z_mmps.i4 = int(float(filtered_z_pos - zpos_filter.prev_val()) * _dt_s) ;
           prev_timestamp_ms = timestamp.i8;
-          prev_x_pos_mm = x_pos_mm.i4;
-          prev_y_pos_mm = y_pos_mm.i4;
-          prev_z_pos_mm = z_pos_mm.i4;
 
-          //  Process data
+          // Generate mock GPS data
           posix2gps(&timestamp.i8, &gps_week.u2, &gps_tow_ms.u4);
-          lat_deg.i4 = 332154770 + int(float(x_pos_mm.i4) * 0.09);
-          lon_deg.i4 = -875436600 - int(float(y_pos_mm.i4) * 0.107);
+          lat_deg.i4 = 332154770 + int(float(filtered_x_pos) * 0.09);
+          lon_deg.i4 = -875436600 - int(float(filtered_y_pos) * 0.107);
           gspeed.u4 = int(sqrt((sq(vel_x_mmps.i4) + sq(vel_y_mmps.i4))));
           gcourse.u4 = (int(atan2(vel_x_mmps.i4, vel_y_mmps.i4) * 57.29578049 * 100000) + 360) % 360;
 
