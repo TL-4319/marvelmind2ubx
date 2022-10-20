@@ -5,21 +5,22 @@ class Iir {
     void Init(float cutoff_hz, float samp_hz, float initial_val){
       float fc = cutoff_hz / samp_hz;
       float c_twoPI_fc = cos(2.0 * PI * fc);
-      b_ = 2.0 - c_twoPI_fc - sqrt(pow(2.0 - c_twoPI_fc, 2.0)) - 1.0;
+      b_ = 2.0 - c_twoPI_fc - sqrt(pow(2.0 - c_twoPI_fc, 2.0) - 1.0);
       a_ = 1.0 - b_;
       prev_output_ = initial_val;
     }
     float Filter (float val){
       float ret;
       ret = a_ * val + b_ * prev_output_;
+      prev_output_return_ = prev_output_;
       prev_output_ = ret;
       return ret;
     }
     float prev_val(){
-      return prev_output_;
+      return prev_output_return_;
     }
   private:
-    float a_, b_, prev_output_;
+    float a_, b_, prev_output_, prev_output_return_;
 };
 
 // Define constants for UBX_NAV protocol
@@ -61,7 +62,7 @@ uint8_t incoming_byte;
 
 int64_t prev_timestamp_ms, start_time_ms, cur_time_ms;
 int32_t prev_x_pos_mm, prev_y_pos_mm, prev_z_pos_mm;
-Iir xpos_filter, ypos_filter, zpos_filter;
+Iir xpos_filter, ypos_filter, zpos_filter, xvel_filter, yvel_filter, zvel_filter;
 
 uint8_t msg_pos, k; 
 float _dt_s;
@@ -178,9 +179,13 @@ void loop() {
           /* Begin processing data */
           if (!filter_init){
             // Cut off freq of 2 Hz and sampling freq of 4 Hz
-            xpos_filter.Init(2.0, 4.0, x_pos_mm.i4);
-            ypos_filter.Init(2.0, 4.0, y_pos_mm.i4);
-            zpos_filter.Init(2.0, 4.0, z_pos_mm.i4);
+            xpos_filter.Init(0.4, 4.0, x_pos_mm.i4);
+            ypos_filter.Init(0.4, 4.0, y_pos_mm.i4);
+            zpos_filter.Init(0.4, 4.0, z_pos_mm.i4);
+            xvel_filter.Init(0.1, 4.0, 0.0);
+            yvel_filter.Init(0.1, 4.0, 0.0);
+            zvel_filter.Init(0.1, 4.0, 0.0);
+            filter_init = true;
             continue;
           }
           else {
@@ -194,8 +199,11 @@ void loop() {
           
           _dt_s = 1000.0 / float(timestamp.i8 - prev_timestamp_ms);
           vel_x_mmps.i4 = int(float(filtered_x_pos - xpos_filter.prev_val()) * _dt_s) ;
+          vel_x_mmps.i4 = xvel_filter.Filter(vel_x_mmps.i4);
           vel_y_mmps.i4 = -int(float(filtered_y_pos - ypos_filter.prev_val()) * _dt_s) ;
+          vel_y_mmps.i4 = yvel_filter.Filter(vel_y_mmps.i4);
           vel_z_mmps.i4 = int(float(filtered_z_pos - zpos_filter.prev_val()) * _dt_s) ;
+          vel_y_mmps.i4 = zvel_filter.Filter(vel_z_mmps.i4);
           prev_timestamp_ms = timestamp.i8;
 
           // Generate mock GPS data
@@ -225,14 +233,6 @@ void loop() {
 
     
   }
-//  cur_time_ms = millis();
-//  if (cur_time_ms - start_time_ms > 200)
-//  {
-//    send_dop();
-//    send_pvt();
-//    send_eoe();
-//    start_time_ms = cur_time_ms;
-//  }
   
 }
 
