@@ -38,6 +38,11 @@ const uint8_t UBX_NAV_DOP_ID = 0x04;
 const uint8_t UBX_NAV_DOP_LEN[2] = {0x12, 0x00}; // Little endian
 const uint8_t DOP_LEN = 22;
 
+// UBX_NAV_TIMEGPS Constants
+const uint8_t UBX_NAV_TIMEGPS_ID = 0x20;
+const uint8_t UBX_NAV_TIMEGPS_LEN[2] = {0x10, 0x00};
+const uint8_t TIMEGPS_LEN = 16;
+
 // Message buffer
 uint8_t msg[100];
 
@@ -258,6 +263,35 @@ void send_eoe()
   msg[7] = gps_tow_ms.u1[3];
   Serial.write(msg,EOE_LEN);
   calc_checksum(EOE_LEN);
+  Serial.write(checksum,2);
+}
+
+// Function to send UBX_NAV_TIMEGPS message
+void send_timegps()
+{
+  Serial.write(UBX_HEADER,2);
+  msg[0] = UBX_NAV_MSG_CLASS;
+  msg[1] = UBX_NAV_TIMEGPS_ID;
+  msg[2] = UBX_NAV_TIMEGPS_LEN[0];
+  msg[3] = UBX_NAV_TIMEGPS_LEN[1];
+  msg[4] = gps_tow_ms.u1[0];
+  msg[5] = gps_tow_ms.u1[1];
+  msg[6] = gps_tow_ms.u1[2];
+  msg[7] = gps_tow_ms.u1[3];
+  msg[8] = 0x00;
+  msg[9] = 0x00;
+  msg[10] = 0x00;
+  msg[11] = 0x00;
+  msg[12] = gps_week.u1[0];
+  msg[13] = gps_week.u1[1];
+  msg[14] = 0x12;
+  msg[15] = 0x07;
+  msg[16] = 0x00;
+  msg[17] = 0x00;
+  msg[18] = 0x00;
+  msg[19] = 0x00;
+  Serial.write(msg,TIMEGPS_LEN);
+  calc_checksum(TIMEGPS_LEN);
   Serial.write(checksum,2);
 }
 
